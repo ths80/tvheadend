@@ -92,11 +92,9 @@ SRCS-${CONFIG_LINUXDVB} += \
 	src/dvb/dvb_transport.c \
 	src/dvb/dvb_preconf.c \
 	src/dvb/dvb_satconf.c \
-	src/webui/extjs_dvb.c \
 
 SRCS-${CONFIG_V4L} += \
 	src/v4l.c \
-	src/webui/extjs_v4l.c \
 
 
 #
@@ -121,6 +119,8 @@ SRCS += src/webui/webui.c \
 	src/webui/extjs.c \
 	src/webui/simpleui.c \
 	src/webui/statedump.c \
+	src/webui/api_v1.c \
+	src/webui/api_extjs.c \
 
 #
 # Extra modules

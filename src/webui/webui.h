@@ -52,4 +52,11 @@ void comet_mailbox_add_message(htsmsg_t *m, int isdebug);
 void comet_flush(void);
 
 
+void api_v1_init(void);
+
+void api_extjs_init(void);
+
+struct http_connection;
+int http_send_json(struct http_connection *hc, struct htsmsg *out);
+
 #endif /* WEBUI_H_ */

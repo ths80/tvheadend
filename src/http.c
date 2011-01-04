@@ -42,6 +42,8 @@ static struct strtab HTTP_cmdtab[] = {
   { "GET",        HTTP_CMD_GET },
   { "HEAD",       HTTP_CMD_HEAD },
   { "POST",       HTTP_CMD_POST },
+  { "PUT",        HTTP_CMD_PUT },
+  { "DELETE",     HTTP_CMD_DELETE },
   { "DESCRIBE",   RTSP_CMD_DESCRIBE },
   { "OPTIONS",    RTSP_CMD_OPTIONS },
   { "SETUP",      RTSP_CMD_SETUP },
@@ -432,11 +434,13 @@ http_process_request(http_connection_t *hc, htsbuf_queue_t *spill)
     http_error(hc, HTTP_STATUS_BAD_REQUEST);
     return 0;
   case HTTP_CMD_GET:
+  case HTTP_CMD_DELETE:
     return http_cmd_get(hc);
   case HTTP_CMD_HEAD:
     hc->hc_no_output = 1;
     return http_cmd_get(hc);
   case HTTP_CMD_POST:
+  case HTTP_CMD_PUT:
     return http_cmd_post(hc, spill);
   }
 }

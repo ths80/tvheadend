@@ -36,6 +36,7 @@
 #include "dvr/dvr.h"
 #include "filebundle.h"
 #include "psi.h"
+#include "htsmsg_json.h"
 
 struct filebundle *filebundles;
 
@@ -70,7 +71,7 @@ page_root(http_connection_t *hc, const char *remain, void *opaque)
   if(is_client_simple(hc)) {
     http_redirect(hc, "/simple.html");
   } else {
-    http_redirect(hc, "/extjs.html");
+    http_redirect(hc, "/webui");
   }
   return 0;
 }
@@ -559,5 +560,22 @@ webui_init(const char *contentpath)
   simpleui_start();
   extjs_start();
   comet_init();
+  api_v1_init();
+  api_extjs_init();
+  
+}
 
+
+/**
+ *
+ */
+int
+http_send_json(http_connection_t *hc, htsmsg_t *out)
+{
+  htsbuf_queue_t *hq = &hc->hc_reply;
+
+  htsmsg_json_serialize(out, hq, 0);
+  htsmsg_destroy(out);
+  http_output_content(hc, "text/x-json; charset=UTF-8");
+  return 0;
 }

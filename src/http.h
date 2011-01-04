@@ -34,6 +34,21 @@ typedef struct http_arg {
 #define HTTP_STATUS_BAD_REQUEST  400
 #define HTTP_STATUS_UNAUTHORIZED 401
 #define HTTP_STATUS_NOT_FOUND    404
+#define HTTP_METHOD_NOT_ALLOWED  405
+
+typedef enum {
+  HTTP_CMD_GET,
+  HTTP_CMD_HEAD,
+  HTTP_CMD_POST,
+  HTTP_CMD_PUT,
+  HTTP_CMD_DELETE,
+  RTSP_CMD_DESCRIBE,
+  RTSP_CMD_OPTIONS,
+  RTSP_CMD_SETUP,
+  RTSP_CMD_TEARDOWN,
+  RTSP_CMD_PLAY,
+  RTSP_CMD_PAUSE,
+} http_cmd_t;
 
 
 typedef struct http_connection {
@@ -59,17 +74,7 @@ typedef struct http_connection {
     HTTP_CON_POST_DATA,
   } hc_state;
 
-  enum {
-    HTTP_CMD_GET,
-    HTTP_CMD_HEAD,
-    HTTP_CMD_POST,
-    RTSP_CMD_DESCRIBE,
-    RTSP_CMD_OPTIONS,
-    RTSP_CMD_SETUP,
-    RTSP_CMD_TEARDOWN,
-    RTSP_CMD_PLAY,
-    RTSP_CMD_PAUSE,
-  } hc_cmd;
+  http_cmd_t hc_cmd;
 
   enum {
     HTTP_VERSION_1_0,
@@ -119,7 +124,7 @@ void http_send_header(http_connection_t *hc, int rc, const char *content,
 		      int contentlen, const char *encoding,
 		      const char *location, int maxage, const char *range);
 
-typedef int (http_callback_t)(http_connection_t *hc, 
+typedef int (http_callback_t)(http_connection_t *hc,
 			      const char *remain, void *opaque);
 
 typedef struct http_path {

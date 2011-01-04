@@ -28,10 +28,7 @@
 #include "htsmsg.h"
 #include "settings.h"
 
-static struct device_list conf_devices;
-static struct device_list probed_devices;
-static struct device_list running_devices;
-
+struct device_list conf_devices, probed_devices, running_devices;
 static int deviceid;
 
 /**
@@ -89,9 +86,10 @@ device_destroy(device_t *d)
   free(d->d_path);
   free(d->d_busid);
   free(d->d_devicename);
+  free(d->d_displayname);
   free(d->d_type);
-  if(d->d_config != NULL)
-    htsmsg_destroy(d->d_config);
+  if(d->d_classconfig != NULL)
+    htsmsg_destroy(d->d_classconfig);
   free(d);
 }
 
@@ -133,6 +131,10 @@ device_add(const char *path, const char *busid, const char *devicename,
   d->d_type       = strdup(type);
   d->d_class      = dc;
   d->d_hostconnection = speed;
+
+  snprintf(buf, sizeof(buf), "%s (%s) %s", devicename, path, type);
+  d->d_displayname = strdup(buf);
+
   LIST_INSERT_HEAD(&probed_devices, d, d_link);
   return d;
 }
@@ -142,11 +144,13 @@ device_add(const char *path, const char *busid, const char *devicename,
  *
  */
 static void
-device_start(device_t *d, htsmsg_t *config)
+device_start(device_t *d, device_t *cfg)
 {
   LIST_REMOVE(d, d_link);
   LIST_INSERT_HEAD(&running_devices, d, d_link);
-  d->d_class->dc_start(d, config);
+
+  tvh_str_update(&d->d_displayname, cfg ? cfg->d_displayname : NULL);
+  d->d_class->dc_start(d, cfg ? cfg->d_classconfig : NULL);
 }
 
 
@@ -167,7 +171,7 @@ device_map0(int (*devcmp)(const device_t *d1, const device_t *d2))
     if(e == NULL)
       continue;
 
-    device_start(d, e->d_config);
+    device_start(d, e);
     device_destroy(e);
   }
 }
@@ -264,6 +268,8 @@ device_save_list(htsmsg_t *all, struct device_list *list)
     htsmsg_add_str(dm, "busid", d->d_busid);
     htsmsg_add_str(dm, "devicename", d->d_devicename);
     htsmsg_add_str(dm, "type", d->d_type);
+    if(d->d_displayname)
+      htsmsg_add_str(dm, "displayname", d->d_displayname);
     htsmsg_add_u32(dm, "enabled", d->d_enabled);
     
     if(d->d_class != NULL && d->d_class->dc_get_conf != NULL) {
@@ -271,8 +277,8 @@ device_save_list(htsmsg_t *all, struct device_list *list)
       if(priv != NULL)
 	htsmsg_add_msg(dm, "config", priv);
     } else {
-      if(d->d_config != NULL)
-	htsmsg_add_msg(dm, "config", htsmsg_copy(d->d_config));
+      if(d->d_classconfig != NULL)
+	htsmsg_add_msg(dm, "classconfig", htsmsg_copy(d->d_classconfig));
     }
     htsmsg_add_msg(all, NULL, dm);
   }
@@ -314,7 +320,8 @@ device_load_one(htsmsg_t *m)
   const char *busid      = htsmsg_get_str(m, "busid");
   const char *devicename = htsmsg_get_str(m, "devicename");
   const char *type       = htsmsg_get_str(m, "type");
-  htsmsg_t *config;
+  const char *displayname= htsmsg_get_str(m, "displayname");
+  htsmsg_t *classconfig;
 
   if(!name || !path || !busid || !devicename || !type)
     return;
@@ -326,9 +333,11 @@ device_load_one(htsmsg_t *m)
   d->d_busid      = strdup(busid);
   d->d_devicename = strdup(devicename);
   d->d_type       = strdup(type);
+  d->d_displayname= displayname ? strdup(displayname) : NULL;
+  d->d_enabled    = htsmsg_get_u32_or_default(m, "enabled", 1);
 
-  if((config = htsmsg_get_map(m, "config")) != NULL)
-    d->d_config = htsmsg_copy(config);
+  if((classconfig = htsmsg_get_map(m, "classconfig")) != NULL)
+    d->d_classconfig = htsmsg_copy(classconfig);
   LIST_INSERT_HEAD(&conf_devices, d, d_link);
 }
 

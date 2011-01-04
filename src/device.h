@@ -26,6 +26,8 @@ struct htsmsg;
 
 LIST_HEAD(device_list, device);
 
+extern struct device_list conf_devices, probed_devices, running_devices;
+
 typedef struct device {
   LIST_ENTRY(device) d_link;
   const struct deviceclass *d_class;  // is NULL if device is not mapped to HW
@@ -36,6 +38,7 @@ typedef struct device {
   char *d_busid;
   char *d_devicename;
   char *d_type;
+  char *d_displayname;
 
   int d_enabled;
 
@@ -46,7 +49,7 @@ typedef struct device {
     HOSTCONNECTION_PCI,
   } d_hostconnection;
 
-  struct htsmsg *d_config;
+  struct htsmsg *d_classconfig;
 
 } device_t;
 
