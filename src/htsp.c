@@ -309,6 +309,8 @@ htsp_build_channel(channel_t *ch, const char *method)
 
   htsmsg_add_u32(out, "eventId",
 		 ch->ch_epg_current != NULL ? ch->ch_epg_current->e_id : 0);
+  htsmsg_add_u32(out, "nextEventId",
+		 ch->ch_epg_next ? ch->ch_epg_next->e_id : 0);
 
   LIST_FOREACH(ctm, &ch->ch_ctms, ctm_channel_link) {
     ct = ctm->ctm_tag;
@@ -497,21 +499,55 @@ htsp_method_addDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
   dvr_entry_t *de;
   dvr_entry_sched_state_t dvr_status;
   const char *dvr_config_name;
-    
-  if(htsmsg_get_u32(in, "eventId", &eventid))
-    return htsp_error("Missing argument 'eventId'");
-  
-  if((e = epg_event_find_by_id(eventid)) == NULL)
-    return htsp_error("Event does not exist");
 
   if((dvr_config_name = htsmsg_get_str(in, "configName")) == NULL)
     dvr_config_name = "";
-  
-  //create the dvr entry
-  de = dvr_entry_create_by_event(dvr_config_name,e, 
-				 htsp->htsp_username ? 
-				 htsp->htsp_username : "anonymous",
-				 NULL, DVR_PRIO_NORMAL);
+
+  if(htsmsg_get_u32(in, "eventId", &eventid))
+    eventid = -1;
+
+  if ((e = epg_event_find_by_id(eventid)) == NULL)
+  {
+    uint32_t iChannelId, iStartTime, iStopTime, iPriority;
+    channel_t *channel;
+    const char *strTitle = NULL, *strDescription = NULL, *strCreator = NULL;
+
+    // no event found with this event id.
+    // check if there is at least a start time, stop time, channel id and title set
+    if (htsmsg_get_u32(in, "channelId", &iChannelId) ||
+        htsmsg_get_u32(in, "start", &iStartTime) ||
+        htsmsg_get_u32(in, "stop", &iStopTime) ||
+        (strTitle = htsmsg_get_str(in, "title")) == NULL)
+    {
+      // not enough info available to create a new entry
+      return htsp_error("Invalid arguments");
+    }
+
+    // invalid channel
+    if ((channel = channel_find_by_identifier(iChannelId)) == NULL)
+      return htsp_error("Channel does not exist");
+
+    // get the optional attributes
+    if (htsmsg_get_u32(in, "priority", &iPriority))
+      iPriority = 0;
+
+    if ((strDescription = htsmsg_get_str(in, "description")) == NULL)
+      strDescription = "";
+
+    if ((strCreator = htsmsg_get_str(in, "creator")) == NULL)
+      strCreator = "";
+
+    // create the dvr entry
+    de = dvr_entry_create(dvr_config_name, channel, iStartTime, iStopTime, strTitle, strDescription, strCreator, NULL, NULL, 0, iPriority);
+  }
+  else
+  {
+    //create the dvr entry
+    de = dvr_entry_create_by_event(dvr_config_name,e,
+                                   htsp->htsp_username ?
+                                   htsp->htsp_username : "anonymous",
+                                   NULL, DVR_PRIO_NORMAL);
+  }
 
   dvr_status = de != NULL ? de->de_sched_state : DVR_NOSTATE;
   
@@ -531,6 +567,44 @@ htsp_method_addDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
     htsmsg_add_u32(out, "success", 0);
     break;
   }
+  return out;
+}
+
+/**
+ * update a Dvrentry
+ */
+static htsmsg_t *
+htsp_method_updateDvrEntry(htsp_connection_t *htsp, htsmsg_t *in)
+{
+  htsmsg_t *out;
+  uint32_t dvrEntryId;
+  dvr_entry_t *de;
+  uint32_t start;
+  uint32_t stop;
+  const char *title = NULL;
+    
+  if(htsmsg_get_u32(in, "id", &dvrEntryId))
+    return htsp_error("Missing argument 'id'");
+  
+  if( (de = dvr_entry_find_by_id(dvrEntryId)) == NULL) 
+    return htsp_error("id not found");
+
+  if(htsmsg_get_u32(in, "start", &start))
+    start = de->de_start;
+  
+  if(htsmsg_get_u32(in, "stop", &stop))
+    stop = de->de_stop;
+
+  title = htsmsg_get_str(in, "title");
+  if (title == NULL)
+    title = de->de_title;
+
+  de = dvr_entry_update(de, title, start, stop);
+
+  //create response
+  out = htsmsg_create_map();
+  htsmsg_add_u32(out, "success", 1);
+  
   return out;
 }
 
@@ -925,6 +999,7 @@ struct {
   { "unsubscribe", htsp_method_unsubscribe, ACCESS_STREAMING},
   { "subscriptionChangeWeight", htsp_method_change_weight, ACCESS_STREAMING},
   { "addDvrEntry", htsp_method_addDvrEntry, ACCESS_RECORDER},
+  { "updateDvrEntry", htsp_method_updateDvrEntry, ACCESS_RECORDER},
   { "deleteDvrEntry", htsp_method_deleteDvrEntry, ACCESS_RECORDER},
   { "epgQuery", htsp_method_epgQuery, ACCESS_STREAMING},
 
@@ -1256,7 +1331,7 @@ htsp_async_send(htsmsg_t *m)
  * global_lock is held
  */
 void
-htsp_event_update(channel_t *ch, event_t *e)
+htsp_channgel_update_current(channel_t *ch)
 {
   htsmsg_t *m;
   time_t now;
@@ -1266,10 +1341,10 @@ htsp_event_update(channel_t *ch, event_t *e)
   htsmsg_add_str(m, "method", "channelUpdate");
   htsmsg_add_u32(m, "channelId", ch->ch_id);
 
-  if(e == NULL)
-    e = epg_event_find_by_time(ch, now);
-  
-  htsmsg_add_u32(m, "eventId", e ? e->e_id : 0);
+  htsmsg_add_u32(m, "eventId",
+		 ch->ch_epg_current ? ch->ch_epg_current->e_id : 0);
+  htsmsg_add_u32(m, "nextEventId",
+		 ch->ch_epg_next ? ch->ch_epg_next->e_id : 0);
   htsp_async_send(m);
 }
 
